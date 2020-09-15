@@ -19,7 +19,7 @@ with open(path.join(here, 'README.md'), encoding='utf-8') as f:
 
 REQUIRED_PKGS = [
     'pyspark==2.4.4',
-    'spark-nlp',
+    'spark-nlp==2.6.1',
     'numpy',
     'pyarrow>=0.16.0',
     'pandas',
@@ -48,7 +48,7 @@ setup(
     # project code, see
     # https://packaging.python.org/en/latest/single_source_version.html
 
-    version='2.5.6',  # Required
+    version='2.6',  # Required
 
     # This is a one-line description or tagline of what your project does. This
     # corresponds to the "Summary" metadata field:
@@ -142,6 +142,8 @@ setup(
         ('', ['nlu/components/classifiers/sentiment_detector/component_infos.json']),
         ('', ['nlu/components/classifiers/sentiment_dl/component_infos.json']),
         ('', ['nlu/components/classifiers/vivekn_sentiment/component_infos.json']),
+        ('', ['nlu/components/classifiers/yake/component_infos.json']),
+        ('', ['nlu/components/classifiers/multi_classifier/component_infos.json']),
 
         #dependency
         ('', ['nlu/components/dependency_typeds/labeled_dependency_parser/component_infos.json']),
@@ -154,6 +156,7 @@ setup(
         ('', ['nlu/components/embeddings/glove/component_infos.json']),
         ('', ['nlu/components/embeddings/xlnet/component_infos.json']),
         ('', ['nlu/components/embeddings/use/component_infos.json']),
+        ('', ['nlu/components/embeddings/sentence_bert/component_infos.json']),
 
 
         #lemma
@@ -207,3 +210,4 @@ setup(
     include_package_data=True  # Needed to install jar file
 
 )
+

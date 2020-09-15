@@ -33,6 +33,7 @@ from nlu.components.dependency_typeds.labeled_dependency_parser.labeled_dependen
 
 # 0 Base internal Spark NLP structure required for all JSL components
 from nlu.components.utils.document_assembler.spark_nlp_document_assembler import SparkNlpDocumentAssembler
+from nlu.components.utils.ner_to_chunk_converter.ner_to_chunk_converter import NerToChunkConverter
 
 # we cant call the embdding file "embeddings" because namespacing wont let us import the Embeddings class inside of it then
 from nlu.components.embedding import Embeddings
@@ -44,6 +45,8 @@ from nlu.components.sentence_detectors.pragmatic_sentence_detector.sentence_dete
 from nlu.components.sentence_detectors.deep_sentence_detector.deep_sentence_detector import SentenDetectorDeep
 # Embeddings
 from nlu.components.embeddings.albert.spark_nlp_albert import SparkNLPAlbert
+from nlu.components.embeddings.sentence_bert.BertSentenceEmbedding import BertSentence
+
 from nlu.components.embeddings.bert.spark_nlp_bert import SparkNLPBert
 from nlu.components.embeddings.elmo.spark_nlp_elmo import SparkNLPElmo
 from nlu.components.embeddings.xlnet.spark_nlp_xlnet import SparkNLPXlnet
@@ -52,6 +55,8 @@ from nlu.components.embeddings.glove.glove import Glove
 
 # classifiers
 from nlu.components.classifiers.classifier_dl.classifier_dl import ClassifierDl
+from nlu.components.classifiers.multi_classifier.multi_classifier import MultiClassifier
+from nlu.components.classifiers.yake.yake import Yake
 from nlu.components.classifiers.language_detector.language_detector import LanguageDetector
 from nlu.components.classifiers.named_entity_recognizer_crf.ner_crf import NERDLCRF
 from nlu.components.classifiers.ner.ner_dl import NERDL
@@ -123,7 +128,8 @@ def load(request, verbose = False):
         components_requested = request.split(' ')
         pipe = NLUPipeline()
         for component in components_requested:
-            if component == ' ' : continue
+            component.replace(' ','')
+            # if component == ' ' : continue
             nlu_component = parse_component_data_from_name_query(component)
             if type(nlu_component) == type([]): # if we get a list of components, then the NLU reference is a pipeline, we do not need to check order
                 # lists are parsed down to multiple components
@@ -195,7 +201,9 @@ def get_default_component_of_type(missing_component_type):
         if missing_component_type == 'chunk_embeddings': return embeddings_chunker.EmbeddingsChunker()
         if missing_component_type == 'unlabeled_dependency': return UnlabledDepParser()
         if missing_component_type == 'labled_dependency': return LabledDepParser('dep')
-        if missing_component_type == 'date': return None
+        if missing_component_type == 'date': return nlu.Matcher('date')
+        if missing_component_type == 'ner_converter': return Util('ner_converter')
+
     else :
         #if there is an @ in the name, we must get some specific pretrained model from the sparknlp reference that should follow after the @
         missing_component_type, sparknlp_reference = missing_component_type.split('@')
@@ -263,9 +271,6 @@ def parse_component_data_from_name_query(request, detect_lang=False):
     # i.e. embed_sentence.bert  
     # fr.embed_sentence.bert will automatically select french bert thus no embed_sentence.en.bert or simmilar is required
     # embed_sentence.bert or en.embed_sentence.bert
-
-    # elif  len(infos) == 2 and component_type == 'embed_sentence' and dataset in nlu.namespace.NameSpace.default_pretrained_component_references :
-        
     # name does not start with a language
     # so query has format <class>.<dataset>
     elif len(infos) == 2:
@@ -363,37 +368,35 @@ def construct_component_from_pipe_identifier(language, sparknlp_reference):
     pipe = PretrainedPipeline(sparknlp_reference, lang=language)
     constructed_components = []
     for component in pipe.light_model.pipeline_model.stages:
-        logger.info("Extracting model from Spark NLP pipeline: %s", component)
+        logger.info("Extracting model from Spark NLP pipeline: %s and creating Component", component)
         parsed=''
         parsed = str(component).split('_')[0].lower()
         logger.info("Parsed Component for : %s", parsed)
-        if parsed == 'match': constructed_components.append(nlu.Matcher(model=component)) 
-        if parsed == 'document': constructed_components.append(nlu.Util(model=component)) 
-        if parsed == 'sentence': constructed_components.append(nlu.Util(component_name='sentence_detector',model=component)) # todo differentiate normal and deep detector
-        if parsed == 'regex': constructed_components.append(nlu.Matcher(component_name='regex', model=component))
-        if parsed == 'text': constructed_components.append(nlu.Matcher(model=component))
-
-        if parsed == 'spell': constructed_components.append(nlu.SpellChecker(model=component))
-        if parsed == 'lemmatizer': constructed_components.append(nlu.lemmatizer.Lemmatizer(model=component))
-        if parsed == 'normalizer': constructed_components.append(nlu.lemmatizer.Normalizer(model=component))
-        if parsed == 'stemmer': constructed_components.append(nlu.stemmer.Stemmer(model=component))
-        if parsed == 'pos' or parsed =='language': constructed_components.append(nlu.Classifier(model=component))
-        if parsed == 'word': constructed_components.append(nlu.Embeddings(model=component))
-        if parsed == 'nerdlmodel': constructed_components.append(nlu.Classifier(model=component))
-        if parsed == 'ner': constructed_components.append(nlu.Classifier(component_name='ner',model=component))
-        if parsed == 'dependency': constructed_components.append(nlu.Util(model=component))
-        if parsed == 'typed': constructed_components.append(nlu.Util(model=component)) # todo util abuse
-        if parsed == 'multi': constructed_components.append(nlu.Util(model=component)) # todo util abuse 
-        if parsed == 'sentimentdlmodel': constructed_components.append(nlu.Classifier(model=component))
-        if parsed == 'universal' or parsed == 'bert' or parsed == 'albert' or parsed == 'elmo' or parsed == 'xlnet' or parsed == 'glove':
-            constructed_components.append(nlu.Embeddings(model=component))
-        if parsed == 'vivekn': constructed_components.append(nlu.Classifier(component_name='vivekn', model=component))
-        if parsed == 'chunker': constructed_components.append(nlu.chunker.Chunker(model=component))
-        if parsed == 'ngram': constructed_components.append(nlu.chunker.Chunker(model=component))
-
-        if parsed == 'embeddings_chunk': constructed_components.append(embeddings_chunker.EmbeddingsChunker(model=component))
-
-        if parsed == 'stopwords': constructed_components.append(nlu.StopWordsCleaner(model=component))
+        
+        if 'NerConverter' in  component.name : constructed_components.append(Util(component_name='ner_converter', model=component)) 
+        elif parsed == 'match': constructed_components.append(nlu.Matcher(model=component)) 
+        elif parsed == 'document': constructed_components.append(nlu.Util(model=component)) 
+        elif parsed == 'sentence': constructed_components.append(nlu.Util(component_name='sentence_detector',model=component)) # todo differentiate normal and deep detector
+        elif parsed == 'regex': constructed_components.append(nlu.Matcher(component_name='regex', model=component))
+        elif parsed == 'text': constructed_components.append(nlu.Matcher(model=component))
+        elif parsed == 'spell': constructed_components.append(nlu.SpellChecker(model=component))
+        elif parsed == 'lemmatizer': constructed_components.append(nlu.lemmatizer.Lemmatizer(model=component))
+        elif parsed == 'normalizer': constructed_components.append(nlu.lemmatizer.Normalizer(model=component))
+        elif parsed == 'stemmer': constructed_components.append(nlu.stemmer.Stemmer(model=component))
+        elif parsed == 'pos' or parsed =='language': constructed_components.append(nlu.Classifier(model=component))
+        elif parsed == 'word': constructed_components.append(nlu.Embeddings(model=component))
+        elif parsed == 'ner' or  parsed == 'nerdlmodel': constructed_components.append(nlu.Classifier(component_name='ner',model=component))
+        elif parsed == 'dependency': constructed_components.append(nlu.Util(model=component))
+        elif parsed == 'typed': constructed_components.append(nlu.Util(model=component)) # todo util abuse
+        elif parsed == 'multi': constructed_components.append(nlu.Util(model=component)) # todo util abuse 
+        elif parsed == 'sentimentdlmodel': constructed_components.append(nlu.Classifier(model=component))
+        elif parsed in ['universal','bert','albert', 'elmo', 'xlnet', 'glove','electra','covidbert','small_bert','']  : constructed_components.append(nlu.Embeddings(model=component))
+        elif parsed == 'vivekn': constructed_components.append(nlu.Classifier(component_name='vivekn', model=component))
+        elif parsed == 'chunker': constructed_components.append(nlu.chunker.Chunker(model=component))
+        elif parsed == 'ngram': constructed_components.append(nlu.chunker.Chunker(model=component))
+        elif '2e2' in parsed: constructed_components.append(nlu.Embeddings(model=component))
+        elif parsed == 'embeddings_chunk': constructed_components.append(embeddings_chunker.EmbeddingsChunker(model=component))
+        elif parsed == 'stopwords': constructed_components.append(nlu.StopWordsCleaner(model=component))
         
         logger.info("Extracted into NLU Component type : %s", parsed)
         if None in constructed_components :
@@ -417,14 +420,17 @@ def construct_component_from_identifier(language, component_type, dataset, compo
     '''
     logger.info('Creating singular NLU component for type=%s sparknlp reference=%s , dataset=%s, language=%s ', component_type, sparknlp_reference, dataset, language)
     try : 
-        if component_type == 'embed' or 'albert' in component_type or 'bert' in component_type or 'xlnet' in component_type or 'use' in component_type or 'glove' in component_type or 'elmo' in component_type or 'tfhub_use' in sparknlp_reference:
+        if sparknlp_reference == 'yake':
+            return Classifier('yake')
+        elif 'bert' in dataset or component_type == 'embed' or 'albert' in component_type or 'bert' in component_type or 'xlnet' in component_type or 'use' in component_type or 'glove' in component_type or 'elmo' in component_type or 'tfhub_use' in sparknlp_reference\
+                or 'bert' in sparknlp_reference or 'labse' in sparknlp_reference or component_type =='embed_sentence':
             if component_type == 'embed' and dataset != '' :
                 return Embeddings(component_name=dataset, language=language, get_default=False,
                                   sparknlp_reference=sparknlp_reference)
             elif component_type == 'embed' :  return Embeddings() #default
             else : return Embeddings(component_name=component_type, language=language, get_default=False,
                               sparknlp_reference=sparknlp_reference)
-        elif component_type == 'classify':
+        elif component_type == 'classify' or  'e2e' in sparknlp_reference:
             if component_type == 'classify' and dataset != '' :
                 return Classifier(component_name=dataset, language=language, get_default=False,
                                   sparknlp_reference=sparknlp_reference)
@@ -494,29 +500,29 @@ def languages():
 def print_all_nlu_components_for_lang(lang='en'):
     '''Print all NLU components avialable for a language Spark NLP pointer'''
     if lang in all_components_info.all_languages :
-        # print('All Pipelines for language', lang, '\n',)
+        # print("All Pipelines for language"+ lang+ "\n"+)
         for nlu_reference in NameSpace.pretrained_pipe_references[lang] :
-            print('NLU pipe reference :  <', nlu_reference, '> points to Spark NLP Pipeline:', NameSpace.pretrained_pipe_references[lang][nlu_reference])
-        print('All Pipelines for language', lang, '\n', NameSpace.pretrained_models_references[lang])
+            print("nlu.load('"+ nlu_reference+ "') returns Spark NLP Pipeline:"+ NameSpace.pretrained_pipe_references[lang][nlu_reference])
+        print("All Pipelines for language"+ lang+ "\n"+ NameSpace.pretrained_models_references[lang])
     
         for nlu_reference in NameSpace.pretrained_models_references[lang] :
-            print('NLU reference : <', nlu_reference , '> points to Spark NLP Model: ', NameSpace.pretrained_models_references[lang][nlu_reference])
+            print("nlu.load('"+ nlu_reference + "') returns Spark NLP Model: "+ NameSpace.pretrained_models_references[lang][nlu_reference])
 
-    else : print ("Language ", lang, ' Does not exsist in NLU. Please check the docs or nlu.print_all_languages() for supported language references')
+    else : print ("Language "+ lang+ " Does not exsist in NLU. Please check the docs or nlu.print_all_languages() for supported language references")
 
 
 def print_all_nlu_components_for_lang(lang='en', type='classifier'):
     '''Print all NLU components avialable for a language Spark NLP pointer'''
     if lang in all_components_info.all_languages :
-        # print('All Pipelines for language', lang, '\n',)
+        # print('All Pipelines for language'+ lang+ '\n'+)
         for nlu_reference in NameSpace.pretrained_pipe_references[lang] :
-            print('NLU pipe reference :  <', nlu_reference, '> points to Spark NLP Pipeline:', NameSpace.pretrained_pipe_references[lang][nlu_reference])
-        print('All Pipelines for language', lang, '\n', NameSpace.pretrained_models_references[lang])
+            print("nlu.load('"+ nlu_reference+ "') returns Spark NLP Pipeline:"+ NameSpace.pretrained_pipe_references[lang][nlu_reference])
+        print("All Pipelines for language"+ lang+ "\n"+ str(NameSpace.pretrained_models_references[lang]))
 
         for nlu_reference in NameSpace.pretrained_models_references[lang] :
-            print('NLU reference : <', nlu_reference , '> points to Spark NLP Model: ', NameSpace.pretrained_models_references[lang][nlu_reference])
+            print("nlu.load('"+ nlu_reference + "') returns Spark NLP Model: "+ NameSpace.pretrained_models_references[lang][nlu_reference])
 
-    else : print ("Language ", lang, ' Does not exsist in NLU. Please check the docs or nlu.print_all_languages() for supported language references')
+    else : print ("Language "+ lang+ " Does not exsist in NLU. Please check the docs or nlu.print_all_languages() for supported language references")
 
 
 def print_components(lang='', action='' ):
@@ -540,16 +546,17 @@ def print_components(lang='', action='' ):
 
     # Print entire Namespace below
     for nlu_reference in nlu.NameSpace.default_pretrained_component_references.keys():
-        print('Default NLU reference : <', nlu_reference , '> of type :' , nlu.NameSpace.default_pretrained_component_references[nlu_reference][1], ' points to : ',nlu.NameSpace.default_pretrained_component_references[nlu_reference][0] , 'Points to Spark NLP reference : ', nlu.NameSpace.default_pretrained_component_references[nlu_reference])
+        component_type =nlu.NameSpace.default_pretrained_component_references[nlu_reference][1][0],  # pipe or model
+        print("nlu.load('"+ nlu_reference + "') '  returns Spark NLP "+ str(component_type)+ ': '+nlu.NameSpace.default_pretrained_component_references[nlu_reference][0] )
 
     for lang in nlu.NameSpace.pretrained_pipe_references.keys():
         for nlu_reference in nlu.NameSpace.pretrained_pipe_references[lang] :
-            print('NLU reference <', nlu_reference, '> for lang', lang, ' points to SPARK NLP model :', nlu.NameSpace.pretrained_pipe_references[lang][nlu_reference])
+            print("nlu.load('"+ nlu_reference+ "') for lang"+ lang+ " returns model Spark NLP model:"+ nlu.NameSpace.pretrained_pipe_references[lang][nlu_reference])
 
     
     for lang in nlu.NameSpace.pretrained_models_references.keys():
         for nlu_reference in nlu.NameSpace.pretrained_models_references[lang] :
-            print('NLU reference <', nlu_reference, '> for lang', lang, ' points to SPARK NLP model :', nlu.NameSpace.pretrained_models_references[lang][nlu_reference])
+            print("nlu.load('"+ nlu_reference+ "')' for lang"+ lang+ " returns model Spark NLP model: "+ nlu.NameSpace.pretrained_models_references[lang][nlu_reference])
 
 def print_component_types():
     ''' Prints all unique component types in NLU'''
@@ -573,9 +580,9 @@ def print_all_model_kinds_for_action(action):
 
             if ref_action == action:
                 if lang_printed==False :
-                    print('For language <',lang ,'> NLU provides the following Models : ')
+                    print('For language <'+lang +'> NLU provides the following Models : ')
                     lang_printed=True
-                print('NLU reference <', nlu_reference, '> points to Spark NLP reference', nlp_reference)
+                print("nlu.load('"+ nlu_reference+ "') returns Spark NLP model "+ nlp_reference)
         
 
 def print_all_model_kinds_for_action_and_lang(lang, action):
@@ -585,7 +592,7 @@ def print_all_model_kinds_for_action_and_lang(lang, action):
         ref_action  =  nlu_reference.split('.')
         if len(ref_action) > 1 : ref_action=ref_action[1]
         if ref_action == action:
-            print('NLU reference <', nlu_reference, '> points to Spark NLP reference', nlp_reference)
+            print("nlu.load('"+ nlu_reference+ "') returns Spark NLP model "+ nlp_reference)
 
 
 class NLU_error():
@@ -595,35 +602,3 @@ class NLU_error():
         print('The NLU components could not be properly created. Please check previous print messages and Verbose mode for further info')
 
     def print_info(self): print("Sorry something went wrong when building the pipeline. Please check verbose mode and your NLU reference.")
-# 
-# def print_all_nlu_models_of_type_for_lang(type='classifier', lang='de'):
-#     '''
-#     
-#     :param type: 
-#     :param lang: 
-#     :return: 
-#     '''
-# 
-#     types = []
-#     for key, component in nlu.all_components_info.all_components.items() : 
-#         if component.type ==type:
-#             # We wound a component of correct type, now we must search the namespace for references for this model in the specific lang            
-#             
-#             if lang in nlu.NameSpace.pretrained_models_references.keys(): 
-#                 lang_candidates = nlu.NameSpace.pretrained_models_references[lang]
-#                 
-#                 for 
-# 
-#                 types.append(component.name)
-# 
-#             
-#             else: print('The requested language <',lang,'> has no avaiable NLU pretrained models. Check nlu.languages() function for supported languages')            
-# 
-#     types = set(types)
-#     print("Provided component types in this NLU version are : ")
-#     for i, type in enumerate(types):
-#         print(i, '. ', type)
-#     return
-
-
-

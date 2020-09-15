@@ -1,7 +1,10 @@
 from nlu.pipe_components import SparkNLUComponent
 class Classifier(SparkNLUComponent):
     def __init__(self, component_name='sentiment_dl', language='en', component_type='classifier', get_default=True ,model = None,sparknlp_reference =''):
-        if 'classifierdl' in sparknlp_reference.split('_')[0] and get_default==False :
+        if 'e2e' in component_name or 'toxic' in component_name :
+            component_name='multi_classifier'
+            SparkNLUComponent.__init__(self, component_name, component_type)
+        elif 'classifierdl' in sparknlp_reference.split('_')[0] and get_default==False :
             component_name='classifier_dl'
             SparkNLUComponent.__init__(self, 'classifier_dl', component_type)
         elif 'sentimentdl' in sparknlp_reference.split('_')[0]:
@@ -13,9 +16,11 @@ class Classifier(SparkNLUComponent):
         elif 'wiki_' in component_name or 'wiki_' in sparknlp_reference :
             component_name='language_detector'
             SparkNLUComponent.__init__(self, component_name, component_type)
+
+
         else : SparkNLUComponent.__init__(self, component_name, component_type)
 
-
+        
         if model != None : self.model = model
         else :
             if 'sentiment' in component_name and 'vivekn' not in component_name:
@@ -34,7 +39,11 @@ class Classifier(SparkNLUComponent):
                 from nlu import NERDLCRF
                 if get_default : self.model = NERDLCRF.get_default_model()
                 else : self.model = NERDLCRF.get_pretrained_model(sparknlp_reference,language)
-            elif 'classifier_dl' in component_name:
+            elif 'multi_classifier_dl' in component_name:
+                from nlu import MultiClassifierDl
+                if get_default : self.model = MultiClassifierDl.get_default_model()
+                else : self.model = MultiClassifierDl.get_pretrained_model(sparknlp_reference,language)
+            elif ('classifier_dl' in component_name or component_name=='toxic') and not 'multi' in component_name:
                 from nlu import ClassifierDl
                 if get_default : self.model = ClassifierDl.get_default_model()
                 else : self.model = ClassifierDl.get_pretrained_model(sparknlp_reference,language)
@@ -46,3 +55,14 @@ class Classifier(SparkNLUComponent):
                 from nlu import PartOfSpeechJsl
                 if get_default : self.model = PartOfSpeechJsl.get_default_model()
                 else : self.model = PartOfSpeechJsl.get_pretrained_model(sparknlp_reference,language)
+            elif 'pos' in component_name:
+                from nlu import PartOfSpeechJsl
+                if get_default : self.model = PartOfSpeechJsl.get_default_model()
+                else : self.model = PartOfSpeechJsl.get_pretrained_model(sparknlp_reference,language)
+            elif 'yake' in component_name:
+                from nlu import Yake
+                self.model  = Yake.get_default_model()
+            elif 'multi_classifier' in component_name :
+                from nlu import MultiClassifier
+                if get_default : self.model = MultiClassifier.get_default_model()
+                else : self.model = MultiClassifier.get_pretrained_model(sparknlp_reference,language)
